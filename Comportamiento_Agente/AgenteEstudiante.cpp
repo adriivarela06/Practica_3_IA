@@ -91,15 +91,72 @@ std::pair<int, int> AgenteEstudiante::JuegaAleatorio(const Tablero& tablero) {
  * @return Resultado del análisis (VICTORIA, DERROTA o EMPATE).
  */
 AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std::pair<int,int> &Mov) {
-    /* ============== Este trozo de código se tiene que quedar aquí  =============== */
-    nodosVisitados++;
-    /* ============== Empieza a partir de aquí tu implementación  =============== */
+   /* ============== Este trozo de código se tiene que quedar aquí  =============== */
+   nodosVisitados++;
 
+   /* ============== Empieza a partir de aquí tu implementación  =============== */
+   Tablero t = tablero; 
+   
+   int ganador = t.comprobarGanador(); 
+   
+   if (ganador == id) return Resultado::VICTORIA;
+   
+   if (ganador != 0 && ganador != -1) return Resultado::DERROTA; 
+   
+   auto sucesores = t.getSucesores();
+   if (ganador == -1 || !t.tieneMovimientosValidos() || sucesores.empty()) return Resultado::EMPATE;
 
-    return Resultado::EMPATE;
+   int jugadorActual = t.getJugadorTurno();
+   bool soyMax = (jugadorActual == id);
+
+   //RECURSIVIDAD
+   if (soyMax) {
+      Resultado mejorResultado = Resultado::DERROTA;
+
+      for (const auto& suc : sucesores) {
+         std::pair<int, int> dummyMov;
+         Resultado resHijo = Status(suc, dummyMov);
+
+         if (resHijo == Resultado::VICTORIA) {
+            Mov = SacarMovimiento(tablero, suc);
+            return Resultado::VICTORIA; 
+         }
+
+         if (resHijo == Resultado::EMPATE && mejorResultado == Resultado::DERROTA) {
+            mejorResultado = Resultado::EMPATE; 
+            Mov = SacarMovimiento(tablero, suc);
+         }
+      }
+      
+      if (mejorResultado == Resultado::DERROTA && !sucesores.empty())
+         Mov = SacarMovimiento(tablero, sucesores[0]);
+
+      return mejorResultado;
+
+   } else {
+      Resultado peorResultado = Resultado::VICTORIA;
+
+      for (const auto& suc : sucesores) {
+         std::pair<int, int> dummyMov;
+         Resultado resHijo = Status(suc, dummyMov);
+
+         if (resHijo == Resultado::DERROTA) {
+            Mov = SacarMovimiento(tablero, suc);
+            return Resultado::DERROTA; 
+         }
+         
+         if (resHijo == Resultado::EMPATE && peorResultado == Resultado::VICTORIA) {
+            peorResultado = Resultado::EMPATE; 
+            Mov = SacarMovimiento(tablero, suc);
+         }
+      }
+      
+      if (peorResultado == Resultado::VICTORIA && !sucesores.empty())
+         Mov = SacarMovimiento(tablero, sucesores[0]);
+
+      return peorResultado;
+   }
 }
-
-
 
 /**
  * @brief Implementación del algoritmo Minimax clásico.
@@ -110,18 +167,81 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
  * @return Valor heurístico del estado.
  */
 double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int prof_Max, std::pair<int,int> &Mov) {
-    /* ============== Este trozo de código se tiene que quedar aquí  =============== */
-    nodosVisitados++;
-    if (abortarBanda) return 0;
-    
-    if (std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
-        abortarBanda = true;
-        return 0;
-    }
-    /* ============== Empieza a partir de aquí tu implementación  =============== */
+   /* ============== Este trozo de código se tiene que quedar aquí  =============== */
+   nodosVisitados++;
 
+   if (tiempoMaxSegundos > 0 && std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
+      abortarBanda = true;
+   }
+   if (abortarBanda) {
+      return heuristica(tablero); 
+   }
+   /* ============== Empieza a partir de aquí tu implementación  =============== */
 
-    return 0;
+   Mov = {-1, -1}; 
+   Tablero t = tablero; 
+   int ganador = t.comprobarGanador(); 
+   
+   if (ganador == id) return GANAR - profundidad; 
+   if (ganador != 0 && ganador != -1) return PERDER + profundidad; 
+   
+   if (ganador == -1) {
+       int ganadorTie = t.getGanadorDesempate();
+       if (ganadorTie == id) return (GANAR / 2.0) - profundidad; 
+       if (ganadorTie != 0 && ganadorTie != -1) return (PERDER / 2.0) + profundidad; 
+       return 0.0; 
+   }
+
+   if (profundidad == prof_Max) return heuristica(t);
+
+   auto sucesores = t.getSucesoresConMovimientos();
+
+   if (sucesores.empty()) {
+       if (!t.tieneMovimientosValidos()) {
+           int ganadorTie = t.getGanadorDesempate();
+           if (ganadorTie == id) return (GANAR / 2.0) - profundidad;
+           if (ganadorTie != 0 && ganadorTie != -1) return (PERDER / 2.0) + profundidad;
+           return 0.0;
+       }
+       
+       Tablero t_pass = t;
+       t_pass.pasarTurno();
+       std::pair<int, int> dummyMov;
+       return minimax(t_pass, profundidad + 1, prof_Max, dummyMov);
+   }
+
+   int jugadorActual = t.getJugadorTurno();
+   bool soyMax = (jugadorActual == id);
+   
+   // SALVAVIDAS INTEGRADO
+   Mov = sucesores[0].second;
+
+   if (soyMax) {
+      double mejorValor = MenosInfinito;
+      for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda; ++it) {
+         std::pair<int, int> dummyMov;
+         double valorHijo = minimax(it->first, profundidad + 1, prof_Max, dummyMov);
+         if (valorHijo > mejorValor) {
+            mejorValor = valorHijo;
+            Mov = it->second; 
+         }
+      }
+      if (mejorValor == MenosInfinito && abortarBanda) return heuristica(t);
+      return mejorValor;
+
+   } else {
+      double peorValor = MasInfinito;
+      for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda; ++it) {
+         std::pair<int, int> dummyMov;
+         double valorHijo = minimax(it->first, profundidad + 1, prof_Max, dummyMov);
+         if (valorHijo < peorValor) {
+            peorValor = valorHijo;
+            Mov = it->second;
+         }
+      }
+      if (peorValor == MasInfinito && abortarBanda) return heuristica(t);
+      return peorValor;
+   }
 }
 
 
@@ -152,18 +272,102 @@ std::pair<int, int> AgenteEstudiante::JuegaInteligente(const Tablero& tablero) {
  * @return Valor heurístico del estado tras la poda.
  */
 double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int prof_Max, double alfa, double beta, std::pair<int,int> &Mov) {
-    /* ============== Este trozo de código se tiene que quedar aquí  =============== */
-    nodosVisitados++;
-    if (abortarBanda) return 0;
-    
-    if (std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
-        abortarBanda = true;
-        return 0;
-    }
-    /* ============== Empieza a partir de aquí tu implementación  =============== */
+   /* ============== Este trozo de código se tiene que quedar aquí  =============== */
+   nodosVisitados++;
 
+   // FIX CRÍTICO: Si nos quedamos sin tiempo, NO devolvemos 0.
+   // Devolvemos la heurística para salvar la valoración de la rama.
+   if (tiempoMaxSegundos > 0 && std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
+      abortarBanda = true;
+   }
+   if (abortarBanda) {
+      return heuristica(tablero); 
+   }
+   /* ============== Empieza a partir de aquí tu implementación  =============== */
 
-    return 0;
+   Mov = {-1, -1}; 
+   Tablero t = tablero; 
+   int ganador = t.comprobarGanador(); 
+   
+   if (ganador == id) return GANAR - profundidad; 
+   if (ganador != 0 && ganador != -1) return PERDER + profundidad; 
+   
+   // Gestión del Tie-Break
+   if (ganador == -1) {
+      int ganadorTie = t.getGanadorDesempate();
+      if (ganadorTie == id) return (GANAR / 2.0) - profundidad; 
+      if (ganadorTie != 0 && ganadorTie != -1) return (PERDER / 2.0) + profundidad; 
+      return 0.0; 
+   }
+
+   if (profundidad == prof_Max) return heuristica(t);
+
+   auto sucesores = t.getSucesoresConMovimientos();
+
+   if (sucesores.empty()) {
+      if (!t.tieneMovimientosValidos()) {
+         int ganadorTie = t.getGanadorDesempate();
+         if (ganadorTie == id) return (GANAR / 2.0) - profundidad;
+         if (ganadorTie != 0 && ganadorTie != -1) return (PERDER / 2.0) + profundidad;
+         return 0.0;
+      }
+      Tablero t_pass = t;
+      t_pass.pasarTurno();
+      std::pair<int, int> dummyMov;
+      return alfaBeta(t_pass, profundidad + 1, prof_Max, alfa, beta, dummyMov);
+   }
+
+   int jugadorActual = t.getJugadorTurno();
+   bool soyMax = (jugadorActual == id);
+   
+   // SALVAVIDAS INTEGRADO: Asignamos el primer movimiento por si abortamos en el bucle
+   Mov = sucesores[0].second;
+
+   if (soyMax) {
+      std::sort(sucesores.begin(), sucesores.end(), [this](const auto& a, const auto& b) {
+         return this->heuristica(a.first) > this->heuristica(b.first);
+      });
+
+      double mejorValor = MenosInfinito;
+      bool podar = false;
+
+      for (auto it = sucesores.begin(); it != sucesores.end() && !podar && !abortarBanda; ++it) {
+         std::pair<int, int> dummyMov;
+         double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, dummyMov);
+         if (valorHijo > mejorValor) {
+            mejorValor = valorHijo;
+            Mov = it->second;
+         }
+         if (mejorValor > alfa) alfa = mejorValor;
+         if (alfa >= beta) podar = true; 
+      }
+      // Evitar devolver MenosInfinito si se abortó de golpe
+      if (mejorValor == MenosInfinito && abortarBanda) return heuristica(t);
+      return mejorValor;
+
+   } else {
+      std::sort(sucesores.begin(), sucesores.end(), [this](const auto& a, const auto& b) {
+          return this->heuristica(a.first) < this->heuristica(b.first);
+      });
+
+      double peorValor = MasInfinito;
+      bool podar = false;
+
+      for (auto it = sucesores.begin(); it != sucesores.end() && !podar && !abortarBanda; ++it) {
+         std::pair<int, int> dummyMov;
+         double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, dummyMov);
+         if (valorHijo < peorValor) {
+            peorValor = valorHijo;
+            Mov = it->second;
+         }
+         if (peorValor < beta) beta = peorValor;
+         if (alfa >= beta) podar = true; 
+      }
+
+      if (peorValor == MasInfinito && abortarBanda) return heuristica(t);
+
+      return peorValor;
+   }
 }
 
 /**
@@ -211,12 +415,115 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 
 
 double AgenteEstudiante::heuristica1(const Tablero& tablero) {
-    //A implementar por el estudiante
-return 0;
+    int oponente = (id == 1) ? 2 : 1;
+    double score = 0.0;
+    int filas = tablero.getFilas();
+    int cols = tablero.getColumnas();
+
+    // 1. Pesos Tácticos Calibrados
+    // Se castiga drásticamente una línea cerrada y se premia la amenaza de líneas abiertas.
+    const double PESO_4_ABIERTO = 500000.0; // Amenaza letal inmediata
+    const double PESO_4_CERRADO = 15000.0;  // Útil, pero bloqueado
+    const double PESO_3_ABIERTO = 80000.0;  // Muy peligroso, se convertirá en 4 abierto
+    const double PESO_3_CERRADO = 2000.0;
+    const double PESO_2 = 150.0;
+    const double PESO_CENTRO = 30.0;        // Fomenta jugar en el medio del tablero
+
+    // Vectores de dirección: Horizontal, Vertical, Diagonal Principal, Diagonal Secundaria
+    int df[] = {0, 1, 1, 1};
+    int dc[] = {1, 0, 1, -1};
+
+    // 2. Escáner de Tablero (Topología y Líneas)
+    for (int f = 0; f < filas; f++) {
+        for (int c = 0; c < cols; c++) {
+            int jugador_celda = tablero.getCelda(f, c);
+            
+            // Si la casilla está vacía, la ignoramos
+            if (jugador_celda == 0) continue;
+
+            // --- A. Control del Centro ---
+            // Las fichas centrales tienen más vectores de conexión
+            int distCentroF = abs(f - filas / 2);
+            int distCentroC = abs(c - cols / 2);
+            double valorCentro = (filas - distCentroF + cols - distCentroC) * PESO_CENTRO;
+            
+            if (jugador_celda == id) score += valorCentro;
+            else score -= valorCentro;
+
+            // --- B. Escáner Direccional de Líneas ---
+            for (int d = 0; d < 4; d++) {
+                int prev_f = f - df[d];
+                int prev_c = c - dc[d];
+                
+                // Optimizador: Solo evaluamos la línea si estamos en su origen
+                // Evita sumar la misma línea múltiples veces.
+                if (prev_f >= 0 && prev_f < filas && prev_c >= 0 && prev_c < cols) {
+                    if (tablero.getCelda(prev_f, prev_c) == jugador_celda) continue;
+                }
+
+                int longitud = 1;
+                int cur_f = f + df[d];
+                int cur_c = c + dc[d];
+                
+                // Avanzamos en la dirección mientras las fichas sean del mismo color
+                while (cur_f >= 0 && cur_f < filas && cur_c >= 0 && cur_c < cols && 
+                       tablero.getCelda(cur_f, cur_c) == jugador_celda) {
+                    longitud++;
+                    cur_f += df[d];
+                    cur_c += dc[d];
+                }
+
+                // Analizamos los extremos de la línea encontrada
+                int extremos_abiertos = 0;
+                
+                // Extremo 1 (Origen - 1)
+                if (prev_f >= 0 && prev_f < filas && prev_c >= 0 && prev_c < cols && 
+                    tablero.getCelda(prev_f, prev_c) == 0) {
+                    extremos_abiertos++;
+                }
+                
+                // Extremo 2 (Fin + 1)
+                if (cur_f >= 0 && cur_f < filas && cur_c >= 0 && cur_c < cols && 
+                    tablero.getCelda(cur_f, cur_c) == 0) {
+                    extremos_abiertos++;
+                }
+
+                // --- C. Valoración de la Línea ---
+                double valor_linea = 0.0;
+                
+                if (longitud >= tablero.getNParaGanar()) {
+                    valor_linea = 10000000.0; // Condición de victoria
+                } else if (longitud == 4) {
+                    if (extremos_abiertos == 2) valor_linea = PESO_4_ABIERTO;
+                    else if (extremos_abiertos == 1) valor_linea = PESO_4_CERRADO;
+                } else if (longitud == 3) {
+                    if (extremos_abiertos == 2) valor_linea = PESO_3_ABIERTO;
+                    else if (extremos_abiertos == 1) valor_linea = PESO_3_CERRADO;
+                } else if (longitud == 2 && extremos_abiertos > 0) {
+                    valor_linea = PESO_2 * extremos_abiertos;
+                }
+
+                // Asignamos la puntuación al jugador correspondiente
+                if (jugador_celda == id) score += valor_linea;
+                else score -= valor_linea;
+            }
+        }
+    }
+
+    // 3. Modificador de Iniciativa (Turno)
+    // El jugador que tiene el turno posee una ventaja enorme para cerrar tácticas (ej: un 3 abierto).
+    int turnoActual = tablero.getJugadorTurno();
+    if (turnoActual == id) {
+        score *= 1.25; 
+    } else {
+        score *= 0.75; 
+    }
+
+    return score;
 }
 
 double AgenteEstudiante::heuristica2(const Tablero& tablero) {
-    //A implementar por el estudiante
-return 0;
+   //A implementar por el estudiante
+   return 0;
 }
 
