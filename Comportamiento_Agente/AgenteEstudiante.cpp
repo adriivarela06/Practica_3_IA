@@ -415,108 +415,83 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 
 
 double AgenteEstudiante::heuristica1(const Tablero& tablero) {
-    int oponente = (id == 1) ? 2 : 1;
     double score = 0.0;
     int filas = tablero.getFilas();
     int cols = tablero.getColumnas();
-
-    // 1. Pesos Tácticos Calibrados
-    // Se castiga drásticamente una línea cerrada y se premia la amenaza de líneas abiertas.
-    const double PESO_4_ABIERTO = 500000.0; // Amenaza letal inmediata
-    const double PESO_4_CERRADO = 15000.0;  // Útil, pero bloqueado
-    const double PESO_3_ABIERTO = 80000.0;  // Muy peligroso, se convertirá en 4 abierto
-    const double PESO_3_CERRADO = 2000.0;
-    const double PESO_2 = 150.0;
-    const double PESO_CENTRO = 30.0;        // Fomenta jugar en el medio del tablero
+    
+    // Obtenemos el objetivo del juego (por defecto 5)
+    int n_ganar = tablero.getNParaGanar();
+    
+    int mi_id = id;
+    int op_id = (id == 1) ? 2 : 1;
 
     // Vectores de dirección: Horizontal, Vertical, Diagonal Principal, Diagonal Secundaria
-    int df[] = {0, 1, 1, 1};
-    int dc[] = {1, 0, 1, -1};
+    int df[] = {0, 1, 1, -1};
+    int dc[] = {1, 0, 1, 1};
 
-    // 2. Escáner de Tablero (Topología y Líneas)
+    // Pesos exponenciales para premiar la acumulación de fichas en una misma ventana.
+    // Damos un 50% extra de peso a la defensa para que el agente sea paranoico ante las amenazas del ninja.
+    const double PESO_4 = 50000.0; 
+    const double PESO_3 = 5000.0;
+    const double PESO_2 = 100.0;
+    const double PESO_1 = 10.0;
+    
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
-            int jugador_celda = tablero.getCelda(f, c);
             
-            // Si la casilla está vacía, la ignoramos
-            if (jugador_celda == 0) continue;
+            // 1. Bono táctico por control del centro
+            int celda = tablero.getCelda(f, c);
+            if (celda != 0) {
+                double val_centro = (filas - abs(f - filas / 2) + cols - abs(c - cols / 2)) * 5.0;
+                if (celda == mi_id) score += val_centro;
+                else score -= val_centro;
+            }
 
-            // --- A. Control del Centro ---
-            // Las fichas centrales tienen más vectores de conexión
-            int distCentroF = abs(f - filas / 2);
-            int distCentroC = abs(c - cols / 2);
-            double valorCentro = (filas - distCentroF + cols - distCentroC) * PESO_CENTRO;
-            
-            if (jugador_celda == id) score += valorCentro;
-            else score -= valorCentro;
-
-            // --- B. Escáner Direccional de Líneas ---
+            // 2. Escáner de Ventanas Deslizantes
             for (int d = 0; d < 4; d++) {
-                int prev_f = f - df[d];
-                int prev_c = c - dc[d];
+                int end_f = f + df[d] * (n_ganar - 1);
+                int end_c = c + dc[d] * (n_ganar - 1);
                 
-                // Optimizador: Solo evaluamos la línea si estamos en su origen
-                // Evita sumar la misma línea múltiples veces.
-                if (prev_f >= 0 && prev_f < filas && prev_c >= 0 && prev_c < cols) {
-                    if (tablero.getCelda(prev_f, prev_c) == jugador_celda) continue;
+                // Comprobamos si la ventana entera de tamaño 'n_ganar' cabe en el tablero
+                if (end_f >= 0 && end_f < filas && end_c >= 0 && end_c < cols) {
+                    int mis_fichas = 0;
+                    int op_fichas = 0;
+                    
+                    // Contamos las fichas dentro de esta ventana específica
+                    for (int i = 0; i < n_ganar; i++) {
+                        int curr_f = f + df[d] * i;
+                        int curr_c = c + dc[d] * i;
+                        int jugador = tablero.getCelda(curr_f, curr_c);
+                        
+                        if (jugador == mi_id) mis_fichas++;
+                        else if (jugador == op_id) op_fichas++;
+                    }
+                    
+                    // Si la ventana está "limpia" (solo contiene fichas de un jugador y huecos)
+                    if (mis_fichas > 0 && op_fichas == 0) {
+                        if (mis_fichas == 4) score += PESO_4;
+                        else if (mis_fichas == 3) score += PESO_3;
+                        else if (mis_fichas == 2) score += PESO_2;
+                        else if (mis_fichas == 1) score += PESO_1;
+                    } 
+                    else if (op_fichas > 0 && mis_fichas == 0) {
+                        if (op_fichas == 4) score -= (PESO_4 * 1.5);
+                        else if (op_fichas == 3) score -= (PESO_3 * 1.5);
+                        else if (op_fichas == 2) score -= (PESO_2 * 1.2);
+                        else if (op_fichas == 1) score -= PESO_1;
+                    }
                 }
-
-                int longitud = 1;
-                int cur_f = f + df[d];
-                int cur_c = c + dc[d];
-                
-                // Avanzamos en la dirección mientras las fichas sean del mismo color
-                while (cur_f >= 0 && cur_f < filas && cur_c >= 0 && cur_c < cols && 
-                       tablero.getCelda(cur_f, cur_c) == jugador_celda) {
-                    longitud++;
-                    cur_f += df[d];
-                    cur_c += dc[d];
-                }
-
-                // Analizamos los extremos de la línea encontrada
-                int extremos_abiertos = 0;
-                
-                // Extremo 1 (Origen - 1)
-                if (prev_f >= 0 && prev_f < filas && prev_c >= 0 && prev_c < cols && 
-                    tablero.getCelda(prev_f, prev_c) == 0) {
-                    extremos_abiertos++;
-                }
-                
-                // Extremo 2 (Fin + 1)
-                if (cur_f >= 0 && cur_f < filas && cur_c >= 0 && cur_c < cols && 
-                    tablero.getCelda(cur_f, cur_c) == 0) {
-                    extremos_abiertos++;
-                }
-
-                // --- C. Valoración de la Línea ---
-                double valor_linea = 0.0;
-                
-                if (longitud >= tablero.getNParaGanar()) {
-                    valor_linea = 10000000.0; // Condición de victoria
-                } else if (longitud == 4) {
-                    if (extremos_abiertos == 2) valor_linea = PESO_4_ABIERTO;
-                    else if (extremos_abiertos == 1) valor_linea = PESO_4_CERRADO;
-                } else if (longitud == 3) {
-                    if (extremos_abiertos == 2) valor_linea = PESO_3_ABIERTO;
-                    else if (extremos_abiertos == 1) valor_linea = PESO_3_CERRADO;
-                } else if (longitud == 2 && extremos_abiertos > 0) {
-                    valor_linea = PESO_2 * extremos_abiertos;
-                }
-
-                // Asignamos la puntuación al jugador correspondiente
-                if (jugador_celda == id) score += valor_linea;
-                else score -= valor_linea;
             }
         }
     }
-
-    // 3. Modificador de Iniciativa (Turno)
-    // El jugador que tiene el turno posee una ventaja enorme para cerrar tácticas (ej: un 3 abierto).
+    
+    // 3. Modificador de Iniciativa
+    // Ajusta la evaluación dependiendo de quién tiene el turno para aprovechar el tempo del juego.
     int turnoActual = tablero.getJugadorTurno();
-    if (turnoActual == id) {
-        score *= 1.25; 
+    if (turnoActual == mi_id) {
+        score *= 1.2; 
     } else {
-        score *= 0.75; 
+        score *= 0.8; 
     }
 
     return score;
