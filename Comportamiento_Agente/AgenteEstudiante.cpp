@@ -570,9 +570,9 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
        df[] = {0, 1, 1, -1},
        dc[] = {1, 0, 1, 1};
 
-   const double PESO_4 = 100000.0,
-                PESO_3 = 8000.0,
-                PESO_2 = 300.0,
+   const double PESO_4 = 500000.0,
+                PESO_3 = 50000.0,
+                PESO_2 = 500.0,
                 PESO_1 = 10.0;
 
    for (int f = 0; f < filas; f++) {
@@ -583,7 +583,7 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
             double val_centro = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 3.0;
 
             if (celda == mi_id) {
-               score += 500.0;
+               score += 500.0;       
                score += val_centro;  
             } else {
                score -= 500.0;
@@ -595,6 +595,7 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
 
    for (int f = 0; f < filas; f++) {
       for (int c = 0; c < cols; c++) {
+         
          for (int d = 0; d < 4; d++) {
             int end_f = f + df[d] * (n_ganar - 1),
                 end_c = c + dc[d] * (n_ganar - 1);
@@ -618,9 +619,9 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
                   else score += PESO_1;
                }
                else if (op_v > 0 && mis_v == 0) {
-                  if (op_v == 4) score -= PESO_4 * 2.0;
-                  else if (op_v == 3) score -= PESO_3 * 1.5;
-                  else if (op_v == 2) score -= PESO_2 * 1.2;
+                  if (op_v == 4) score -= PESO_4 * 10.0;
+                  else if (op_v == 3) score -= PESO_3 * 5.0;
+                  else if (op_v == 2) score -= PESO_2 * 2.0;
                   else score -= PESO_1;
                }
             }
