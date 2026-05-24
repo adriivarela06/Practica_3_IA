@@ -429,13 +429,11 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
        df[] = {0, 1, 1, -1},
        dc[] = {1, 0, 1, 1};
 
-   // Pesos para ventanas deslizantes
    const double PESO_4 = 100000.0,
                 PESO_3 = 8000.0,
                 PESO_2 = 300.0,
                 PESO_1 = 10.0;
 
-   // ── 1. Contar fichas totales de cada jugador ──────────────────────────
    int mis_fichas_total = 0,
        op_fichas_total = 0;
 
@@ -447,14 +445,10 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
          else if (cel == op_id) op_fichas_total++;
       }
 
-   // Si el rival tiene más fichas que yo, penalizamos fuerte
-   // (puede indicar que activamos una bomba o casilla roja)
    score += (mis_fichas_total - op_fichas_total) * 500.0;
 
-   // ── 2. Escáner de ventanas deslizantes ───────────────────────────────
    for (int f = 0; f < filas; f++) {
       for (int c = 0; c < cols; c++) {
-         // Control del centro
          int celda = tablero.getCelda(f, c);
 
          if (celda != 0) {
@@ -487,7 +481,6 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                   if (tipo == Tablero::TipoCelda::AMARILLO) tiene_amarilla = true;
                }
 
-               // Ventana limpia mía
                if (mis_v > 0 && op_v == 0) {
                   double bonus = 0;
 
@@ -496,17 +489,15 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                   else if (mis_v == 2) bonus = PESO_2;
                   else bonus = PESO_1;
 
-                  // Penalizar ventanas que pasan por casillas peligrosas vacías
-                  if (tiene_amarilla) bonus *= 0.05; // bomba destruye la fila/col
-                  if (tiene_roja) bonus *= 0.1;  // roja convierte ficha en rival
+                  if (tiene_amarilla) bonus *= 0.05;
+                  if (tiene_roja) bonus *= 0.1;
 
                   score += bonus;
                }
-               // Ventana limpia del rival
                else if (op_v > 0 && mis_v == 0) {
                   double malus = 0;
 
-                  if (op_v == 4) malus = PESO_4 * 2.0;  // urgente bloquear
+                  if (op_v == 4) malus = PESO_4 * 2.0;
                   else if (op_v == 3) malus = PESO_3 * 1.5;
                   else if (op_v == 2) malus = PESO_2 * 1.2;
                   else malus = PESO_1;
@@ -518,15 +509,11 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
       }
    }
 
-   // ── 3. Penalizar casillas vacías peligrosas accesibles ────────────────
-   // Recorremos casillas vacías especiales y penalizamos su proximidad
    for (int f = 0; f < filas; f++) {
       for (int c = 0; c < cols; c++) {
          if (tablero.getCelda(f, c) == 0){
             Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
             if (tipo != Tablero::TipoCelda::NORMAL && tipo != Tablero::TipoCelda::VERDE){
-               // Comprobamos si hay fichas mías en fila/col (para amarilla)
-               // o fichas mías adyacentes (para roja)
                if (tipo == Tablero::TipoCelda::AMARILLO) {
                   int mis_en_fila = 0, 
                       mis_en_col = 0,
@@ -542,16 +529,15 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
                      if (tablero.getCelda(ff, c) == mi_id) mis_en_col++;
                      if (tablero.getCelda(ff, c) == op_id) op_en_col++;
                   }
-                  // Si activarla nos destruye más fichas de las que destruye al rival, penalizar
+                  
                   int danio_propio = mis_en_fila + mis_en_col,
                       danio_rival = op_en_fila + op_en_col;
 
                   score -= danio_propio * 2000.0;
-                  score += danio_rival * 800.0;  // puede ser tácticamente buena si destruye al rival
+                  score += danio_rival * 800.0;
                }
 
                if (tipo == Tablero::TipoCelda::ROJO) {
-                  // Si tenemos fichas adyacentes somos propensos a ir aquí — penalizar
                   bool vecino_mio = false;
                   int ddf[] = {-1,-1,-1,0,0,1,1,1},
                       ddc[] = {-1, 0, 1,-1,1,-1,0,1};
