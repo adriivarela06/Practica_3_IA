@@ -566,47 +566,67 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
        cols = tablero.getColumnas(),
        n_ganar = tablero.getNParaGanar(),
        mi_id = id,
-       op_id = (id == 1) ? 2 : 1;
+       op_id = (id == 1) ? 2 : 1,
+       df[] = {0, 1, 1, -1},
+       dc[] = {1, 0, 1, 1};
 
-    // ── 1. Solo contarCombinaciones con pesos fijos ───────────────────────
-   for (int k = 1; k < n_ganar; k++) {
-      int mis_lineas = tablero.contarCombinaciones(k, mi_id),
-          op_lineas = tablero.contarCombinaciones(k, op_id);
-      double peso = 0.0;
+   const double PESO_4 = 100000.0,
+                PESO_3 = 8000.0,
+                PESO_2 = 300.0,
+                PESO_1 = 10.0;
 
-      switch (k) {
-         case 1: 
-            peso = 5.0;      
-            break;
-         case 2: 
-            peso = 100.0;    
-            break;
-         case 3: 
-            peso = 5000.0;   
-            break;
-         case 4: 
-            peso = 200000.0; 
-            break;
-         default: 
-            peso = 10.0 * k; 
-            break;
-      }
-
-      score += mis_lineas * peso;
-      score -= op_lineas  * peso;
-   }
-
-   // ── 2. Control del centro básico ──────────────────────────────────────
-   for (int f = 0; f < filas; f++)
+   for (int f = 0; f < filas; f++) {
       for (int c = 0; c < cols; c++) {
-         int cel = tablero.getCelda(f, c);
+         int celda = tablero.getCelda(f, c);
 
-         if (cel != 0){
-            double val = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 2.0;
-            if (cel == mi_id) score += val;
-            else              score -= val;
+         if (celda != 0) {
+            double val_centro = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 3.0;
+
+            if (celda == mi_id) {
+               score += 500.0;
+               score += val_centro;  
+            } else {
+               score -= 500.0;
+               score -= val_centro;
+            }
          }
       }
+   }
+
+   for (int f = 0; f < filas; f++) {
+      for (int c = 0; c < cols; c++) {
+         for (int d = 0; d < 4; d++) {
+            int end_f = f + df[d] * (n_ganar - 1),
+                end_c = c + dc[d] * (n_ganar - 1);
+            
+            if (end_f >= 0 && end_f < filas && end_c >= 0 && end_c < cols) {
+               int mis_v = 0, op_v = 0;
+
+               for (int i = 0; i < n_ganar; i++) {
+                  int ff = f + df[d] * i,
+                      cc = c + dc[d] * i,
+                      jugador = tablero.getCelda(ff, cc);
+
+                  if (jugador == mi_id) mis_v++;
+                  else if (jugador == op_id) op_v++;
+               }
+
+               if (mis_v > 0 && op_v == 0) {
+                  if (mis_v == 4) score += PESO_4;
+                  else if (mis_v == 3) score += PESO_3;
+                  else if (mis_v == 2) score += PESO_2;
+                  else score += PESO_1;
+               }
+               else if (op_v > 0 && mis_v == 0) {
+                  if (op_v == 4) score -= PESO_4 * 2.0;
+                  else if (op_v == 3) score -= PESO_3 * 1.5;
+                  else if (op_v == 2) score -= PESO_2 * 1.2;
+                  else score -= PESO_1;
+               }
+            }
+         }
+      }
+   }
 
    return score;
 }
