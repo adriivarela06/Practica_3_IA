@@ -275,8 +275,6 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
    /* ============== Este trozo de código se tiene que quedar aquí  =============== */
    nodosVisitados++;
 
-   // FIX CRÍTICO: Si nos quedamos sin tiempo, NO devolvemos 0.
-   // Devolvemos la heurística para salvar la valoración de la rama.
    if (tiempoMaxSegundos > 0 && std::chrono::duration<double>(std::chrono::steady_clock::now() - inicioBusqueda).count() > tiempoMaxSegundos) {
       abortarBanda = true;
    }
@@ -292,7 +290,6 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
    if (ganador == id) return GANAR - profundidad; 
    if (ganador != 0 && ganador != -1) return PERDER + profundidad; 
    
-   // Gestión del Tie-Break
    if (ganador == -1) {
       int ganadorTie = t.getGanadorDesempate();
       if (ganadorTie == id) return (GANAR / 2.0) - profundidad; 
@@ -320,18 +317,12 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
    int jugadorActual = t.getJugadorTurno();
    bool soyMax = (jugadorActual == id);
    
-   // SALVAVIDAS INTEGRADO: Asignamos el primer movimiento por si abortamos en el bucle
    Mov = sucesores[0].second;
 
    if (soyMax) {
-      std::sort(sucesores.begin(), sucesores.end(), [this](const auto& a, const auto& b) {
-         return this->heuristica(a.first) > this->heuristica(b.first);
-      });
-
       double mejorValor = MenosInfinito;
-      bool podar = false;
 
-      for (auto it = sucesores.begin(); it != sucesores.end() && !podar && !abortarBanda; ++it) {
+      for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda; ++it) {
          std::pair<int, int> dummyMov;
          double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, dummyMov);
          if (valorHijo > mejorValor) {
@@ -339,21 +330,15 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
             Mov = it->second;
          }
          if (mejorValor > alfa) alfa = mejorValor;
-         if (alfa >= beta) podar = true; 
+         if (alfa >= beta) break; 
       }
-      // Evitar devolver MenosInfinito si se abortó de golpe
       if (mejorValor == MenosInfinito && abortarBanda) return heuristica(t);
       return mejorValor;
 
    } else {
-      std::sort(sucesores.begin(), sucesores.end(), [this](const auto& a, const auto& b) {
-          return this->heuristica(a.first) < this->heuristica(b.first);
-      });
-
       double peorValor = MasInfinito;
-      bool podar = false;
 
-      for (auto it = sucesores.begin(); it != sucesores.end() && !podar && !abortarBanda; ++it) {
+      for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda; ++it) {
          std::pair<int, int> dummyMov;
          double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, dummyMov);
          if (valorHijo < peorValor) {
@@ -361,11 +346,9 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
             Mov = it->second;
          }
          if (peorValor < beta) beta = peorValor;
-         if (alfa >= beta) podar = true; 
+         if (alfa >= beta) break; 
       }
-
       if (peorValor == MasInfinito && abortarBanda) return heuristica(t);
-
       return peorValor;
    }
 }
@@ -416,82 +399,138 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 
 double AgenteEstudiante::heuristica1(const Tablero& tablero) {
     double score = 0.0;
-    int filas = tablero.getFilas();
-    int cols = tablero.getColumnas();
-    
-    // Obtenemos el objetivo del juego (por defecto 5)
+    int filas   = tablero.getFilas();
+    int cols    = tablero.getColumnas();
     int n_ganar = tablero.getNParaGanar();
     
     int mi_id = id;
     int op_id = (id == 1) ? 2 : 1;
 
-    // Vectores de dirección: Horizontal, Vertical, Diagonal Principal, Diagonal Secundaria
+    // Pesos para ventanas deslizantes
+    const double PESO_4 = 100000.0; 
+    const double PESO_3 = 8000.0;
+    const double PESO_2 = 300.0;
+    const double PESO_1 = 10.0;
+
     int df[] = {0, 1, 1, -1};
     int dc[] = {1, 0, 1, 1};
 
-    // Pesos exponenciales para premiar la acumulación de fichas en una misma ventana.
-    // Damos un 50% extra de peso a la defensa para que el agente sea paranoico ante las amenazas del ninja.
-    const double PESO_4 = 50000.0; 
-    const double PESO_3 = 5000.0;
-    const double PESO_2 = 100.0;
-    const double PESO_1 = 10.0;
-    
+    // ── 1. Contar fichas totales de cada jugador ──────────────────────────
+    int mis_fichas_total = 0;
+    int op_fichas_total  = 0;
+    for (int f = 0; f < filas; f++)
+        for (int c = 0; c < cols; c++) {
+            int cel = tablero.getCelda(f, c);
+            if (cel == mi_id) mis_fichas_total++;
+            else if (cel == op_id) op_fichas_total++;
+        }
+
+    // Si el rival tiene más fichas que yo, penalizamos fuerte
+    // (puede indicar que activamos una bomba o casilla roja)
+    score += (mis_fichas_total - op_fichas_total) * 500.0;
+
+    // ── 2. Escáner de ventanas deslizantes ───────────────────────────────
     for (int f = 0; f < filas; f++) {
         for (int c = 0; c < cols; c++) {
-            
-            // 1. Bono táctico por control del centro
+
+            // Control del centro
             int celda = tablero.getCelda(f, c);
             if (celda != 0) {
-                double val_centro = (filas - abs(f - filas / 2) + cols - abs(c - cols / 2)) * 5.0;
+                double val_centro = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 3.0;
                 if (celda == mi_id) score += val_centro;
-                else score -= val_centro;
+                else                score -= val_centro;
             }
 
-            // 2. Escáner de Ventanas Deslizantes
             for (int d = 0; d < 4; d++) {
                 int end_f = f + df[d] * (n_ganar - 1);
                 int end_c = c + dc[d] * (n_ganar - 1);
                 
-                // Comprobamos si la ventana entera de tamaño 'n_ganar' cabe en el tablero
-                if (end_f >= 0 && end_f < filas && end_c >= 0 && end_c < cols) {
-                    int mis_fichas = 0;
-                    int op_fichas = 0;
-                    
-                    // Contamos las fichas dentro de esta ventana específica
-                    for (int i = 0; i < n_ganar; i++) {
-                        int curr_f = f + df[d] * i;
-                        int curr_c = c + dc[d] * i;
-                        int jugador = tablero.getCelda(curr_f, curr_c);
-                        
-                        if (jugador == mi_id) mis_fichas++;
-                        else if (jugador == op_id) op_fichas++;
-                    }
-                    
-                    // Si la ventana está "limpia" (solo contiene fichas de un jugador y huecos)
-                    if (mis_fichas > 0 && op_fichas == 0) {
-                        if (mis_fichas == 4) score += PESO_4;
-                        else if (mis_fichas == 3) score += PESO_3;
-                        else if (mis_fichas == 2) score += PESO_2;
-                        else if (mis_fichas == 1) score += PESO_1;
-                    } 
-                    else if (op_fichas > 0 && mis_fichas == 0) {
-                        if (op_fichas == 4) score -= (PESO_4 * 1.5);
-                        else if (op_fichas == 3) score -= (PESO_3 * 1.5);
-                        else if (op_fichas == 2) score -= (PESO_2 * 1.2);
-                        else if (op_fichas == 1) score -= PESO_1;
-                    }
+                if (end_f < 0 || end_f >= filas || end_c < 0 || end_c >= cols) continue;
+
+                int mis_v  = 0, op_v = 0;
+                bool tiene_roja = false, tiene_amarilla = false;
+
+                for (int i = 0; i < n_ganar; i++) {
+                    int ff = f + df[d] * i;
+                    int cc = c + dc[d] * i;
+                    int jugador = tablero.getCelda(ff, cc);
+                    Tablero::TipoCelda tipo = tablero.getTipoCelda(ff, cc);
+
+                    if (jugador == mi_id)      mis_v++;
+                    else if (jugador == op_id) op_v++;
+
+                    if (tipo == Tablero::TipoCelda::ROJO)     tiene_roja     = true;
+                    if (tipo == Tablero::TipoCelda::AMARILLO)  tiene_amarilla = true;
+                }
+
+                // Ventana limpia mía
+                if (mis_v > 0 && op_v == 0) {
+                    double bonus = 0;
+                    if      (mis_v == 4) bonus = PESO_4;
+                    else if (mis_v == 3) bonus = PESO_3;
+                    else if (mis_v == 2) bonus = PESO_2;
+                    else                 bonus = PESO_1;
+
+                    // Penalizar ventanas que pasan por casillas peligrosas vacías
+                    if (tiene_amarilla) bonus *= 0.05; // bomba destruye la fila/col
+                    if (tiene_roja)     bonus *= 0.1;  // roja convierte ficha en rival
+                    score += bonus;
+                }
+                // Ventana limpia del rival
+                else if (op_v > 0 && mis_v == 0) {
+                    double malus = 0;
+                    if      (op_v == 4) malus = PESO_4 * 2.0;  // urgente bloquear
+                    else if (op_v == 3) malus = PESO_3 * 1.5;
+                    else if (op_v == 2) malus = PESO_2 * 1.2;
+                    else                malus = PESO_1;
+                    score -= malus;
                 }
             }
         }
     }
-    
-    // 3. Modificador de Iniciativa
-    // Ajusta la evaluación dependiendo de quién tiene el turno para aprovechar el tempo del juego.
-    int turnoActual = tablero.getJugadorTurno();
-    if (turnoActual == mi_id) {
-        score *= 1.2; 
-    } else {
-        score *= 0.8; 
+
+    // ── 3. Penalizar casillas vacías peligrosas accesibles ────────────────
+    // Recorremos casillas vacías especiales y penalizamos su proximidad
+    for (int f = 0; f < filas; f++) {
+        for (int c = 0; c < cols; c++) {
+            if (tablero.getCelda(f, c) != 0) continue;
+
+            Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
+            if (tipo == Tablero::TipoCelda::NORMAL || tipo == Tablero::TipoCelda::VERDE) continue;
+
+            // Comprobamos si hay fichas mías en fila/col (para amarilla)
+            // o fichas mías adyacentes (para roja)
+            if (tipo == Tablero::TipoCelda::AMARILLO) {
+                int mis_en_fila = 0, mis_en_col = 0;
+                int op_en_fila  = 0, op_en_col  = 0;
+                for (int cc = 0; cc < cols; cc++) {
+                    if (tablero.getCelda(f, cc) == mi_id) mis_en_fila++;
+                    if (tablero.getCelda(f, cc) == op_id) op_en_fila++;
+                }
+                for (int ff = 0; ff < filas; ff++) {
+                    if (tablero.getCelda(ff, c) == mi_id) mis_en_col++;
+                    if (tablero.getCelda(ff, c) == op_id) op_en_col++;
+                }
+                // Si activarla nos destruye más fichas de las que destruye al rival, penalizar
+                int danio_propio = mis_en_fila + mis_en_col;
+                int danio_rival  = op_en_fila  + op_en_col;
+                score -= danio_propio * 2000.0;
+                score += danio_rival  * 800.0;  // puede ser tácticamente buena si destruye al rival
+            }
+
+            if (tipo == Tablero::TipoCelda::ROJO) {
+                // Si tenemos fichas adyacentes somos propensos a ir aquí — penalizar
+                bool vecino_mio = false;
+                int ddf[] = {-1,-1,-1,0,0,1,1,1};
+                int ddc[] = {-1, 0, 1,-1,1,-1,0,1};
+                for (int k = 0; k < 8; k++) {
+                    int vf = f + ddf[k], vc = c + ddc[k];
+                    if (vf >= 0 && vf < filas && vc >= 0 && vc < cols && tablero.getCelda(vf, vc) == mi_id)
+                        vecino_mio = true;
+                }
+                if (vecino_mio) score -= 1500.0;
+            }
+        }
     }
 
     return score;
