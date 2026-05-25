@@ -420,141 +420,95 @@ double AgenteEstudiante::heuristicaPrueba(const Tablero& tablero) {
 
 
 double AgenteEstudiante::heuristica1(const Tablero& tablero) {
-    double score = 0.0;
-    int filas = tablero.getFilas(), cols = tablero.getColumnas(), n = tablero.getNParaGanar();
-    int mi_id = id, op_id = (id == 1) ? 2 : 1;
-    
-    // Arrays de direcciones (horizontal, vertical, diagonales) y vecinos
-    int df[] = {0, 1, 1, -1}, dc[] = {1, 0, 1, 1};
-    int ddf[] = {-1, -1, -1, 0, 0, 1, 1, 1}, ddc[] = {-1, 0, 1, -1, 1, -1, 0, 1};
-    
-    // Pesos mapeados por cantidad de fichas [0, 1, 2, 3, 4]
-    const double p_propios[] = {0, 10.0, 300.0, 8000.0, 100000.0};
-    const double p_rivales[] = {0, 10.0, 360.0, 12000.0, 200000.0};
-
-    // UN SOLO BUCLE para evaluar todo el tablero
-    for (int f = 0; f < filas; f++) {
-        for (int c = 0; c < cols; c++) {
-            int celda = tablero.getCelda(f, c);
-            Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
-
-            // 1. Control del centro y conteo total de piezas (500 pts por pieza)
-            if (celda != 0) {
-                double val_centro = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 3.0;
-                score += (celda == mi_id) ? (500.0 + val_centro) : -(500.0 + val_centro);
-            } 
-            // 2. Casillas Especiales (Solo si están vacías evaluamos su amenaza)
-            else if (tipo == Tablero::TipoCelda::AMARILLO) { // Bomba 
-                for (int i = 0; i < std::max(filas, cols); i++) {
-                    if (i < cols) score += (tablero.getCelda(f, i) == op_id ? 800 : (tablero.getCelda(f, i) == mi_id ? -2000 : 0));
-                    if (i < filas) score += (tablero.getCelda(i, c) == op_id ? 800 : (tablero.getCelda(i, c) == mi_id ? -2000 : 0));
-                }
-            } else if (tipo == Tablero::TipoCelda::ROJO) { // Sabotaje [cite: 78]
-                for (int k = 0; k < 8; k++) {
-                    int vf = f + ddf[k], vc = c + ddc[k];
-                    if (vf >= 0 && vf < filas && vc >= 0 && vc < cols && tablero.getCelda(vf, vc) == mi_id) {
-                        score -= 1500.0; break; // Un solo vecino es suficiente para penalizar
-                    }
-                }
-            }
-
-            // 3. Evaluación de líneas (Ventanas de tamaño N)
-            for (int d = 0; d < 4; d++) {
-                if (f + df[d]*(n-1) >= 0 && f + df[d]*(n-1) < filas && c + dc[d]*(n-1) >= 0 && c + dc[d]*(n-1) < cols) {
-                    int mis_v = 0, op_v = 0;
-                    bool t_ama = false, t_roja = false;
-
-                    for (int i = 0; i < n; i++) {
-                        int celda_linea = tablero.getCelda(f + df[d]*i, c + dc[d]*i);
-                        Tablero::TipoCelda tipo_linea = tablero.getTipoCelda(f + df[d]*i, c + dc[d]*i);
-                        
-                        if (celda_linea == mi_id) mis_v++; else if (celda_linea == op_id) op_v++;
-                        if (tipo_linea == Tablero::TipoCelda::AMARILLO) t_ama = true;
-                        if (tipo_linea == Tablero::TipoCelda::ROJO) t_roja = true;
-                    }
-
-                    // Puntuación de la línea evaluada
-                    if (mis_v > 0 && op_v == 0) {
-                        score += p_propios[mis_v] * (t_ama ? 0.05 : 1.0) * (t_roja ? 0.1 : 1.0);
-                    } else if (op_v > 0 && mis_v == 0) {
-                        score -= p_rivales[op_v];
-                    }
-                }
-            }
-        }
-    }
-    return score;
-}
-
-double AgenteEstudiante::heuristica2(const Tablero& tablero) {
    double score = 0.0;
-   int filas = tablero.getFilas(),
-       cols = tablero.getColumnas(),
-       n_ganar = tablero.getNParaGanar(),
-       mi_id = id,
-       op_id = (id == 1) ? 2 : 1,
-       df[] = {0, 1, 1, -1},
-       dc[] = {1, 0, 1, 1};
 
-   const double PESO_4 = 500000.0,
-                PESO_3 = 50000.0,
-                PESO_2 = 500.0,
-                PESO_1 = 10.0;
+   int filas = tablero.getFilas(), 
+       cols = tablero.getColumnas(), 
+       n = tablero.getNParaGanar(),
+       mi_id = id, 
+       op_id = (id == 1) ? 2 : 1,
+       df[] = {0, 1, 1, -1}, 
+       dc[] = {1, 0, 1, 1},
+       ddf[] = {-1, -1, -1, 0, 0, 1, 1, 1}, 
+       ddc[] = {-1, 0, 1, -1, 1, -1, 0, 1};
+   
+   const double p_propios[] = {0, 10.0, 300.0, 8000.0, 100000.0},
+                p_rivales[] = {0, 10.0, 360.0, 12000.0, 200000.0};
 
    for (int f = 0; f < filas; f++) {
       for (int c = 0; c < cols; c++) {
          int celda = tablero.getCelda(f, c);
+         Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
 
          if (celda != 0) {
             double val_centro = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 3.0;
-
-            if (celda == mi_id) {
-               score += 500.0;       
-               score += val_centro;  
-            } else {
-               score -= 500.0;
-               score -= val_centro;
+            score += (celda == mi_id) ? (500.0 + val_centro) : -(500.0 + val_centro);
+         } 
+         else if (tipo == Tablero::TipoCelda::AMARILLO) { 
+            for (int i = 0; i < std::max(filas, cols); i++) {
+               if (i < cols) 
+                  score += tablero.getCelda(f, i) == op_id ? 800 : (tablero.getCelda(f, i) == mi_id ? -2000 : 0);
+               if (i < filas) 
+                  score += tablero.getCelda(i, c) == op_id ? 800 : (tablero.getCelda(i, c) == mi_id ? -2000 : 0);
+            }
+         } else if (tipo == Tablero::TipoCelda::ROJO) { 
+            bool salida = false;
+            for (int k = 0; k < 8 && !salida; k++) {
+               int vf = f + ddf[k], 
+                   vc = c + ddc[k];
+               if (vf >= 0 && vf < filas && vc >= 0 && vc < cols && tablero.getCelda(vf, vc) == mi_id){
+                  score -= 1500.0;
+                  salida = true;
+               }
             }
          }
-      }
-   }
 
-   for (int f = 0; f < filas; f++) {
-      for (int c = 0; c < cols; c++) {
-         
          for (int d = 0; d < 4; d++) {
-            int end_f = f + df[d] * (n_ganar - 1),
-                end_c = c + dc[d] * (n_ganar - 1);
-            
-            if (end_f >= 0 && end_f < filas && end_c >= 0 && end_c < cols) {
-               int mis_v = 0, op_v = 0;
+            if (f + df[d]*(n-1) >= 0 && f + df[d]*(n-1) < filas && c + dc[d]*(n-1) >= 0 && c + dc[d]*(n-1) < cols) {
+               int mis_v = 0, 
+                   op_v = 0;
+               bool t_ama = false, 
+                    t_roja = false;
 
-               for (int i = 0; i < n_ganar; i++) {
-                  int ff = f + df[d] * i,
-                      cc = c + dc[d] * i,
-                      jugador = tablero.getCelda(ff, cc);
+               for (int i = 0; i < n; i++) {
+                  int celda_linea = tablero.getCelda(f + df[d]*i, c + dc[d]*i);
+                  Tablero::TipoCelda tipo_linea = tablero.getTipoCelda(f + df[d]*i, c + dc[d]*i);
+                  
+                  if (celda_linea == mi_id) mis_v++; 
+                  else if (celda_linea == op_id) op_v++;
 
-                  if (jugador == mi_id) mis_v++;
-                  else if (jugador == op_id) op_v++;
+                  if (tipo_linea == Tablero::TipoCelda::AMARILLO) t_ama = true;
+                  if (tipo_linea == Tablero::TipoCelda::ROJO) t_roja = true;
                }
 
-               if (mis_v > 0 && op_v == 0) {
-                  if (mis_v == 4) score += PESO_4;
-                  else if (mis_v == 3) score += PESO_3;
-                  else if (mis_v == 2) score += PESO_2;
-                  else score += PESO_1;
-               }
-               else if (op_v > 0 && mis_v == 0) {
-                  if (op_v == 4) score -= PESO_4 * 10.0;
-                  else if (op_v == 3) score -= PESO_3 * 5.0;
-                  else if (op_v == 2) score -= PESO_2 * 2.0;
-                  else score -= PESO_1;
-               }
+               if (mis_v > 0 && op_v == 0)
+                  score += p_propios[mis_v] * (t_ama ? 0.05 : 1.0) * (t_roja ? 0.1 : 1.0);
+               else if (op_v > 0 && mis_v == 0)
+                  score -= p_rivales[op_v];
             }
          }
       }
    }
-
    return score;
 }
 
+double AgenteEstudiante::heuristica2(const Tablero& tablero) {
+   int mi_id = id,
+       rival_id = (mi_id == 1) ? 2 : 1;
+
+   Tablero tab_copia = tablero;
+   int ganador = tab_copia.comprobarGanador();
+
+   if (ganador == mi_id)
+      return 10000.0;
+   else if (ganador == rival_id)
+      return -10000.0;
+   else if (ganador == -1) 
+      return 0.0;
+   
+
+   int mis_4 = tablero.contarCombinaciones(4, mi_id),
+       rival_4 = tablero.contarCombinaciones(4, rival_id);
+
+   return (mis_4 * 10.0) - (rival_4 * 50.0);
+}
