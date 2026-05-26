@@ -107,15 +107,14 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
    if (ganador == -1 || !t.tieneMovimientosValidos() || sucesores.empty()) return Resultado::EMPATE;
 
    int jugadorActual = t.getJugadorTurno();
-   bool soyMax = (jugadorActual == id);
 
    //RECURSIVIDAD
-   if (soyMax) {
+   if (jugadorActual == id) {
       Resultado mejorResultado = Resultado::DERROTA;
 
       for (const auto& suc : sucesores) {
-         std::pair<int, int> dummyMov;
-         Resultado resHijo = Status(suc, dummyMov);
+         std::pair<int, int> auxMov;
+         Resultado resHijo = Status(suc, auxMov);
 
          if (resHijo == Resultado::VICTORIA) {
             Mov = SacarMovimiento(tablero, suc);
@@ -137,8 +136,8 @@ AgenteEstudiante::Resultado AgenteEstudiante::Status(const Tablero &tablero, std
       Resultado peorResultado = Resultado::VICTORIA;
 
       for (const auto& suc : sucesores) {
-         std::pair<int, int> dummyMov;
-         Resultado resHijo = Status(suc, dummyMov);
+         std::pair<int, int> auxMov;
+         Resultado resHijo = Status(suc, auxMov);
 
          if (resHijo == Resultado::DERROTA) {
             Mov = SacarMovimiento(tablero, suc);
@@ -210,22 +209,19 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
        
       Tablero t_pass = t;
       t_pass.pasarTurno();
-      std::pair<int, int> dummyMov;
+      std::pair<int, int> auxMov;
 
-      return minimax(t_pass, profundidad + 1, prof_Max, dummyMov);
+      return minimax(t_pass, profundidad + 1, prof_Max, auxMov);
    }
 
    int jugadorActual = t.getJugadorTurno();
-   bool soyMax = (jugadorActual == id);
-   
-   // SALVAVIDAS INTEGRADO
    Mov = sucesores[0].second;
 
-   if (soyMax) {
+   if (jugadorActual == id) {
       double mejorValor = MenosInfinito;
       for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda; ++it) {
-         std::pair<int, int> dummyMov;
-         double valorHijo = minimax(it->first, profundidad + 1, prof_Max, dummyMov);
+         std::pair<int, int> auxMov;
+         double valorHijo = minimax(it->first, profundidad + 1, prof_Max, auxMov);
 
          if (valorHijo > mejorValor) {
             mejorValor = valorHijo;
@@ -240,8 +236,8 @@ double AgenteEstudiante::minimax(const Tablero &tablero, int profundidad, int pr
    } else {
       double peorValor = MasInfinito;
       for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda; ++it) {
-         std::pair<int, int> dummyMov;
-         double valorHijo = minimax(it->first, profundidad + 1, prof_Max, dummyMov);
+         std::pair<int, int> auxMov;
+         double valorHijo = minimax(it->first, profundidad + 1, prof_Max, auxMov);
 
          if (valorHijo < peorValor) {
             peorValor = valorHijo;
@@ -323,23 +319,22 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
 
       Tablero t_pass = t;
       t_pass.pasarTurno();
-      std::pair<int, int> dummyMov;
+      std::pair<int, int> auxMov;
 
-      return alfaBeta(t_pass, profundidad + 1, prof_Max, alfa, beta, dummyMov);
+      return alfaBeta(t_pass, profundidad + 1, prof_Max, alfa, beta, auxMov);
    }
 
    int jugadorActual = t.getJugadorTurno();
-   bool soyMax = (jugadorActual == id);
    
    Mov = sucesores[0].second;
 
-   if (soyMax) {
+   if (jugadorActual == id) {
       double mejorValor = MenosInfinito;
       bool salida = false;
 
       for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda && !salida; ++it) {
-         std::pair<int, int> dummyMov;
-         double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, dummyMov);
+         std::pair<int, int> auxMov;
+         double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, auxMov);
 
          if (valorHijo > mejorValor) {
             mejorValor = valorHijo;
@@ -358,8 +353,8 @@ double AgenteEstudiante::alfaBeta(const Tablero &tablero, int profundidad, int p
       bool salida = false;
 
       for (auto it = sucesores.begin(); it != sucesores.end() && !abortarBanda && !salida; ++it) {
-         std::pair<int, int> dummyMov;
-         double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, dummyMov);
+         std::pair<int, int> auxMov;
+         double valorHijo = alfaBeta(it->first, profundidad + 1, prof_Max, alfa, beta, auxMov);
 
          if (valorHijo < peorValor) {
             peorValor = valorHijo;
@@ -506,7 +501,6 @@ double AgenteEstudiante::heuristica2(const Tablero& tablero) {
    else if (ganador == -1) 
       return 0.0;
    
-
    int mis_4 = tablero.contarCombinaciones(4, mi_id),
        rival_4 = tablero.contarCombinaciones(4, rival_id);
 
