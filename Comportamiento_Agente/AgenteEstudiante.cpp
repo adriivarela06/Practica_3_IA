@@ -436,8 +436,10 @@ double AgenteEstudiante::heuristica1(const Tablero& tablero) {
          Tablero::TipoCelda tipo = tablero.getTipoCelda(f, c);
 
          if (celda != 0) {
-            double val_centro = (filas - abs(f - filas/2) + cols - abs(c - cols/2)) * 3.0;
-            score += (celda == mi_id) ? (500.0 + val_centro) : -(500.0 + val_centro);
+            double val_posicion = (f >= 3 && f <= 5 && c >= 3 && c <= 5) ? 50.0 : 
+                                  (f >= 2 && f <= 6 && c >= 2 && c <= 6) ? 20.0 : 5.0;
+
+            score += (celda == mi_id) ? (500.0 + val_posicion) : -(500.0 + val_posicion);
          } 
          else if (tipo == Tablero::TipoCelda::AMARILLO) { 
             for (int i = 0; i < std::max(filas, cols); i++) {
